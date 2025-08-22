@@ -187,8 +187,7 @@
     <footer>Data is stored locally in your browser. Export CSV to share.</footer>
   </div>
 
-  <script>
-<script>
+ <script>
 (() => {
   // ---------- State & defaults ----------
   const STORAGE_KEY = "ai-learning-pod-feedback-v1-github";
@@ -235,13 +234,14 @@
 
   // ---------- renderers ----------
   function renderMembers(){
-    // If members ever got wiped, restore defaults
     if (!Array.isArray(state.members) || state.members.length === 0) {
       state.members = DEFAULT_MEMBERS.slice();
       selectedMember = state.members[0];
       saveState();
     }
-    $("#memberCount")?.(0); // harmless no-op if not present
+    const mc = document.getElementById("memberCount");
+    if (mc) mc.textContent = state.members.length + " member" + (state.members.length !== 1 ? "s" : "");
+
     memberSelect.innerHTML = state.members.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
     if(!state.members.includes(selectedMember)) selectedMember = state.members[0];
     memberSelect.value = selectedMember;
@@ -423,7 +423,5 @@
   renderAll();
 })();
 </script>
-
-  </script>
 </body>
 </html>
