@@ -189,15 +189,15 @@
 
   <script>
     (() => {
-      const STORAGE_KEY = "ai-learning-pod-feedback-v1-github";
-      const DEFAULT_MEMBERS = ["Bryan","Crystal","Florencia","Monica","Tiffany"];
-      const const INITIAL_SESSIONS = [   { id: (self.crypto||window.crypto).randomUUID(), title: "Add your first session…", date: "" } ]; = [{ id: (self.crypto||window.crypto).randomUUID(), title: "Kickoff: Prompts & Guardrails", date: new Date().toISOString().slice(0,10) }];
+      STORAGE_KEY = "ai-learning-pod-feedback-v1-github";
+      DEFAULT_MEMBERS = ["Bryan","Crystal","Florencia","Monica","Tiffany"];
+const INITIAL_SESSIONS = [];
 
       function loadState(){
         try {
-          const raw = localStorage.getItem(STORAGE_KEY);
+          raw = localStorage.getItem(STORAGE_KEY);
           if(!raw) return { members: DEFAULT_MEMBERS.slice(), sessions: INITIAL_SESSIONS.slice(), entries: [] };
-          const parsed = JSON.parse(raw);
+          parsed = JSON.parse(raw);
           return {
             members: Array.isArray(parsed.members) && parsed.members.length ? parsed.members : DEFAULT_MEMBERS.slice(),
             sessions: Array.isArray(parsed.sessions) && parsed.sessions.length ? parsed.sessions : INITIAL_SESSIONS.slice(),
