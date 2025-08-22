@@ -191,7 +191,7 @@
     (() => {
       const STORAGE_KEY = "ai-learning-pod-feedback-v1-github";
       const DEFAULT_MEMBERS = ["Bryan","Crystal","Florencia","Monica","Tiffany"];
-      const INITIAL_SESSIONS = [{ id: (self.crypto||window.crypto).randomUUID(), title: "Kickoff: Prompts & Guardrails", date: new Date().toISOString().slice(0,10) }];
+      const const INITIAL_SESSIONS = [   { id: (self.crypto||window.crypto).randomUUID(), title: "Add your first session…", date: "" } ]; = [{ id: (self.crypto||window.crypto).randomUUID(), title: "Kickoff: Prompts & Guardrails", date: new Date().toISOString().slice(0,10) }];
 
       function loadState(){
         try {
