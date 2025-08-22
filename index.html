@@ -188,145 +188,242 @@
   </div>
 
   <script>
-    (() => {
-      STORAGE_KEY = "ai-learning-pod-feedback-v1-github";
-      DEFAULT_MEMBERS = ["Bryan","Crystal","Florencia","Monica","Tiffany"];
-const INITIAL_SESSIONS = [];
+<script>
+(() => {
+  // ---------- State & defaults ----------
+  const STORAGE_KEY = "ai-learning-pod-feedback-v1-github";
+  const DEFAULT_MEMBERS = ["Bryan","Crystal","Florencia","Monica","Tiffany"];
+  const INITIAL_SESSIONS = []; // start clean, no default session
 
-      function loadState(){
-        try {
-          raw = localStorage.getItem(STORAGE_KEY);
-          if(!raw) return { members: DEFAULT_MEMBERS.slice(), sessions: INITIAL_SESSIONS.slice(), entries: [] };
-          parsed = JSON.parse(raw);
-          return {
-            members: Array.isArray(parsed.members) && parsed.members.length ? parsed.members : DEFAULT_MEMBERS.slice(),
-            sessions: Array.isArray(parsed.sessions) && parsed.sessions.length ? parsed.sessions : INITIAL_SESSIONS.slice(),
-            entries: Array.isArray(parsed.entries) ? parsed.entries : []
-          };
-        } catch { return { members: DEFAULT_MEMBERS.slice(), sessions: INITIAL_SESSIONS.slice(), entries: [] }; }
+  function loadState(){
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return { members: DEFAULT_MEMBERS.slice(), sessions: INITIAL_SESSIONS.slice(), entries: [] };
+      const parsed = JSON.parse(raw) || {};
+      return {
+        members: Array.isArray(parsed.members) && parsed.members.length ? parsed.members : DEFAULT_MEMBERS.slice(),
+        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : INITIAL_SESSIONS.slice(),
+        entries: Array.isArray(parsed.entries) ? parsed.entries : []
+      };
+    } catch {
+      return { members: DEFAULT_MEMBERS.slice(), sessions: INITIAL_SESSIONS.slice(), entries: [] };
+    }
+  }
+  let state = loadState();
+  function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+  // ---------- DOM refs ----------
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+  const newDate = $("#newDate"), newTitle = $("#newTitle");
+  const memberSelect = $("#memberSelect"), sessionSelect = $("#sessionSelect");
+  const filterMember = $("#filterMember"), filterSession = $("#filterSession");
+  const starRating = $("#starRating");
+  const entriesBody = $("#entriesBody");
+
+  // ---------- UI state ----------
+  let selectedMember = state.members[0] || null;
+  let selectedSessionId = state.sessions[0]?.id || null;
+  let rating = 0;
+  let likes = { pacing:false, examples:false, handsOn:false, discussion:false };
+  let filterSessionId = "all";
+  let filterMemberVal = "all";
+
+  // ---------- helpers ----------
+  function escapeHtml(str){ return String(str).replace(/[&<>\"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[s])); }
+  function csvQuote(str){ if(!str) return ""; const needs=/[\",\n]/.test(str); const escaped=String(str).replace(/\"/g,'\"\"'); return needs ? '\"'+escaped+'\"' : escaped; }
+
+  // ---------- renderers ----------
+  function renderMembers(){
+    // If members ever got wiped, restore defaults
+    if (!Array.isArray(state.members) || state.members.length === 0) {
+      state.members = DEFAULT_MEMBERS.slice();
+      selectedMember = state.members[0];
+      saveState();
+    }
+    $("#memberCount")?.(0); // harmless no-op if not present
+    memberSelect.innerHTML = state.members.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+    if(!state.members.includes(selectedMember)) selectedMember = state.members[0];
+    memberSelect.value = selectedMember;
+
+    filterMember.innerHTML = `<option value="all">All</option>` + state.members.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+    filterMember.value = filterMemberVal;
+  }
+
+  function renderSessions(){
+    if (!Array.isArray(state.sessions)) state.sessions = [];
+    if (state.sessions.length === 0) {
+      sessionSelect.innerHTML = `<option value="">— Add a session first —</option>`;
+      sessionSelect.disabled = true;
+      selectedSessionId = null;
+
+      filterSession.innerHTML = `<option value="all">All</option>`;
+      filterSession.value = "all";
+    } else {
+      sessionSelect.disabled = false;
+      sessionSelect.innerHTML = state.sessions
+        .map(s => `<option value="${s.id}">${s.date || "⟂"} — ${escapeHtml(s.title)}</option>`)
+        .join("");
+
+      if (!selectedSessionId || !state.sessions.find(s => s.id === selectedSessionId)) {
+        selectedSessionId = state.sessions[0].id;
       }
-      let state = loadState();
-      function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+      sessionSelect.value = selectedSessionId;
 
-      const $ = s => document.querySelector(s);
-      const $$ = s => Array.from(document.querySelectorAll(s));
-      const newDate = $("#newDate"), newTitle = $("#newTitle");
-      const memberSelect = $("#memberSelect"), sessionSelect = $("#sessionSelect");
-      const filterMember = $("#filterMember"), filterSession = $("#filterSession");
-      const starRating = $("#starRating");
-      const entriesBody = $("#entriesBody");
+      filterSession.innerHTML = `<option value="all">All</option>` + state.sessions
+        .map(s => `<option value="${s.id}">${s.date || "⟂"} — ${escapeHtml(s.title)}</option>`)
+        .join("");
+      filterSession.value = filterSessionId;
+    }
+  }
 
-      let selectedMember = state.members[0];
-      let selectedSessionId = state.sessions[0].id;
-      let rating = 0;
-      let likes = { pacing:false, examples:false, handsOn:false, discussion:false };
-      let filterSessionId = "all";
-      let filterMemberVal = "all";
+  function renderStars(){
+    starRating.innerHTML = "";
+    for(let n=1;n<=5;n++){
+      const b=document.createElement("button");
+      b.textContent = n <= rating ? "★" : "☆";
+      if(n <= rating) b.classList.add("on");
+      b.addEventListener("click", () => { rating = n; renderStars(); });
+      starRating.appendChild(b);
+    }
+  }
 
-      function escapeHtml(str){ return String(str).replace(/[&<>\"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[s])); }
-      function csvQuote(str){ if(!str) return ""; const needs=/[\",\n]/.test(str); const escaped=String(str).replace(/\"/g,'\"\"'); return needs ? '\"'+escaped+'\"' : escaped; }
+  function renderLikes(){ $$(".pill").forEach(btn => { const key = btn.getAttribute("data-like"); btn.classList.toggle("on", !!likes[key]); }); }
 
-      function renderMembers(){
-        $("#memberCount").textContent = state.members.length + " member" + (state.members.length !== 1 ? "s" : "");
-        memberSelect.innerHTML = state.members.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-        if(!state.members.includes(selectedMember)) selectedMember = state.members[0];
-        memberSelect.value = selectedMember;
-        filterMember.innerHTML = `<option value="all">All</option>` + state.members.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-        filterMember.value = filterMemberVal;
-      }
-      function renderSessions(){
-        sessionSelect.innerHTML = state.sessions.map(s => `<option value="${s.id}">${s.date} — ${escapeHtml(s.title)}</option>`).join("");
-        if(!state.sessions.find(s => s.id === selectedSessionId)) selectedSessionId = state.sessions[0]?.id;
-        sessionSelect.value = selectedSessionId;
-        filterSession.innerHTML = `<option value="all">All</option>` + state.sessions.map(s => `<option value="${s.id}">${s.date} — ${escapeHtml(s.title)}</option>`).join("");
-        filterSession.value = filterSessionId;
-      }
-      function renderStars(){
-        starRating.innerHTML = "";
-        for(let n=1;n<=5;n++){
-          const b=document.createElement("button");
-          b.textContent = n <= rating ? "★" : "☆";
-          if(n <= rating) b.classList.add("on");
-          b.addEventListener("click", () => { rating = n; renderStars(); });
-          starRating.appendChild(b);
-        }
-      }
-      function renderLikes(){ $$(".pill").forEach(btn => { const key = btn.getAttribute("data-like"); btn.classList.toggle("on", !!likes[key]); }); }
-      function renderTable(){
-        const filtered = state.entries.filter(e => {
-          if(filterSessionId !== "all" && e.sessionId !== filterSessionId) return false;
-          if(filterMemberVal !== "all" && e.member !== filterMemberVal) return false;
-          return true;
-        });
-        entriesBody.innerHTML = filtered.map(e => `
-          <tr>
-            <td>${new Date(e.createdAt).toLocaleString()}</td>
-            <td>${escapeHtml((state.sessions.find(s => s.id===e.sessionId)||{}).title || "—")}</td>
-            <td>${escapeHtml(e.member)}</td>
-            <td>${"★".repeat(e.rating)}${"☆".repeat(5-e.rating)}</td>
-            <td>${escapeHtml((e.likes||[]).join(", "))}</td>
-            <td>${escapeHtml(e.feedback||"")}</td>
-            <td>${escapeHtml(e.topics||"")}</td>
-          </tr>`).join("");
-      }
-      const chartCanvas = document.getElementById("chart"), ctx = chartCanvas.getContext("2d");
-      function renderChart(){
-        const map = new Map();
-        for(const e of state.entries){
-          if(!map.has(e.sessionId)) map.set(e.sessionId, {count:0,sum:0});
-          const x = map.get(e.sessionId); x.count += 1; x.sum += e.rating;
-        }
-        const data = state.sessions.map(s => { const x = map.get(s.id); return { session: s.title, avg: x ? +(x.sum/x.count).toFixed(2) : 0 }; });
-        ctx.clearRect(0,0,chartCanvas.width, chartCanvas.height);
-        const padding = { left: 40, right: 10, top: 10, bottom: 30 }, W = chartCanvas.width, H = chartCanvas.height;
-        const innerW = W - padding.left - padding.right, innerH = H - padding.top - padding.bottom, maxVal = 5, n = data.length || 1;
-        const barWidth = innerW / n * 0.6, gap = innerW / n * 0.4;
-        ctx.strokeStyle = "#e5e7eb";
-        for(let i=0;i<=5;i++){ const y = padding.top + innerH * (1 - i/maxVal); ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(W - padding.right, y); ctx.stroke(); ctx.fillStyle = "#64748b"; ctx.font = "12px sans-serif"; ctx.textAlign="right"; ctx.textBaseline="middle"; ctx.fillText(String(i), padding.left - 6, y); }
-        ctx.fillStyle = "rgba(11,61,145,0.9)";
-        data.forEach((d, idx) => { const x = padding.left + idx * (barWidth + gap) + gap/2; const h = innerH * (d.avg / maxVal); const y = padding.top + innerH - h; roundRect(ctx, x, y, Math.max(1, barWidth), h, 6); ctx.fill(); });
-      }
-      function roundRect(ctx, x, y, w, h, r){ if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2; ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function renderTable(){
+    const filtered = state.entries.filter(e => {
+      if(filterSessionId !== "all" && e.sessionId !== filterSessionId) return false;
+      if(filterMemberVal !== "all" && e.member !== filterMemberVal) return false;
+      return true;
+    });
+    entriesBody.innerHTML = filtered.map(e => `
+      <tr>
+        <td>${new Date(e.createdAt).toLocaleString()}</td>
+        <td>${escapeHtml((state.sessions.find(s => s.id===e.sessionId)||{}).title || "—")}</td>
+        <td>${escapeHtml(e.member)}</td>
+        <td>${"★".repeat(e.rating)}${"☆".repeat(5-e.rating)}</td>
+        <td>${escapeHtml((e.likes||[]).join(", "))}</td>
+        <td>${escapeHtml(e.feedback||"")}</td>
+        <td>${escapeHtml(e.topics||"")}</td>
+      </tr>`).join("");
+  }
 
-      document.getElementById("addSessionBtn").addEventListener("click", () => {
-        const title = newTitle.value.trim(); if(!title) return;
-        const s = { id: (self.crypto||window.crypto).randomUUID(), title, date: newDate.value || new Date().toISOString().slice(0,10) };
-        state.sessions = [s, ...state.sessions]; selectedSessionId = s.id; newTitle.value = ""; saveState(); renderSessions(); renderChart();
-      });
-      document.getElementById("saveEntryBtn").addEventListener("click", () => {
-        if(!selectedMember || !selectedSessionId || rating === 0){ alert("Please select a member, a session, and a rating (1–5). ✨"); return; }
-        const entry = { id: (self.crypto||window.crypto).randomUUID(), member: selectedMember, sessionId: selectedSessionId, rating, likes: Object.keys(likes).filter(k => likes[k]), feedback: (document.getElementById("feedback").value || "").trim(), topics: (document.getElementById("topics").value || "").trim(), createdAt: new Date().toISOString() };
-        state.entries = [entry, ...state.entries]; saveState(); document.getElementById("feedback").value = ""; document.getElementById("topics").value = ""; rating=0; likes={pacing:false,examples:false,handsOn:false,discussion:false}; renderStars(); renderLikes(); renderTable(); renderChart();
-      });
-      document.getElementById("resetBtn").addEventListener("click", () => { document.getElementById("feedback").value = ""; document.getElementById("topics").value = ""; rating=0; likes={pacing:false,examples:false,handsOn:false,discussion:false}; renderStars(); renderLikes(); });
-      document.getElementById("exportBtn").addEventListener("click", () => {
-        const headers = ["createdAt","sessionDate","sessionTitle","member","rating","likes","feedback","futureTopics"];
-        const rows = state.entries.map(e => { const s = state.sessions.find(x => x.id === e.sessionId) || { date:"", title:"" }; return [ e.createdAt, s.date, s.title, e.member, String(e.rating), (e.likes||[]).join(";"), csvQuote(e.feedback||""), csvQuote(e.topics||"") ].join(","); });
-        const csv = [headers.join(","), ...rows].join("\n"); const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
-        const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "ai-learning-pod-feedback-"+new Date().toISOString().slice(0,10)+".csv";
-        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-      });
-      document.getElementById("clearBtn").addEventListener("click", () => {
-        if(!confirm("This will permanently delete all saved data on this device. Continue?")) return;
-        state = { members: DEFAULT_MEMBERS.slice(), sessions: INITIAL_SESSIONS.slice(), entries: [] };
-        selectedMember = state.members[0]; selectedSessionId = state.sessions[0].id; rating=0; likes={pacing:false,examples:false,handsOn:false,discussion:false};
-        localStorage.removeItem(STORAGE_KEY); newDate.value = new Date().toISOString().slice(0,10); newTitle.value = ""; document.getElementById("feedback").value = ""; document.getElementById("topics").value = "";
-        filterMemberVal = "all"; filterSessionId = "all"; renderMembers(); renderSessions(); renderStars(); renderLikes(); renderTable(); renderChart();
-      });
-      document.getElementById("clearFiltersBtn").addEventListener("click", () => { filterMemberVal = "all"; filterSessionId = "all"; filterMember.value="all"; filterSession.value="all"; renderTable(); });
-      memberSelect.addEventListener("change", e => selectedMember = e.target.value);
-      sessionSelect.addEventListener("change", e => selectedSessionId = e.target.value);
-      filterMember.addEventListener("change", e => { filterMemberVal = e.target.value; renderTable(); });
-      filterSession.addEventListener("change", e => { filterSessionId = e.target.value; renderTable(); });
-      document.getElementById("editMembersBtn").addEventListener("click", () => { document.getElementById("memberEditArea").style.display = "block"; document.getElementById("memberList").value = state.members.join("\n"); });
-      document.getElementById("saveMembersBtn").addEventListener("click", () => { const lines = document.getElementById("memberList").value.split("\n").map(s => s.trim()).filter(Boolean); if(!lines.length) return; state.members = lines; if(!lines.includes(selectedMember)) selectedMember = lines[0]; saveState(); document.getElementById("memberEditArea").style.display = "none"; renderMembers(); });
-      document.getElementById("cancelMembersBtn").addEventListener("click", () => { document.getElementById("memberEditArea").style.display = "none"; });
-      $$(".pill").forEach(btn => { btn.addEventListener("click", () => { const key = btn.getAttribute("data-like"); likes[key] = !likes[key]; renderLikes(); }); });
+  const chartCanvas = document.getElementById("chart");
+  const ctx = chartCanvas.getContext("2d");
+  function roundRect(ctx, x, y, w, h, r){ if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2; ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function renderChart(){
+    const map = new Map();
+    for(const e of state.entries){
+      if(!map.has(e.sessionId)) map.set(e.sessionId, {count:0,sum:0});
+      const x = map.get(e.sessionId); x.count += 1; x.sum += e.rating;
+    }
+    const data = state.sessions.map(s => { const x = map.get(s.id); return { session: s.title, avg: x ? +(x.sum/x.count).toFixed(2) : 0 }; });
 
-      function renderAll(){ renderMembers(); renderSessions(); renderStars(); renderLikes(); renderTable(); renderChart(); }
-      function renderStars(){ starRating.innerHTML = ""; for(let n=1;n<=5;n++){ const b=document.createElement("button"); b.textContent = n <= rating ? "★" : "☆"; if(n <= rating) b.classList.add("on"); b.addEventListener("click", () => { rating = n; renderStars(); }); starRating.appendChild(b); } }
-      newDate.value = new Date().toISOString().slice(0,10); renderAll();
-    })();
+    ctx.clearRect(0,0,chartCanvas.width, chartCanvas.height);
+    const padding = { left: 40, right: 10, top: 10, bottom: 30 }, W = chartCanvas.width, H = chartCanvas.height;
+    const innerW = W - padding.left - padding.right, innerH = H - padding.top - padding.bottom, maxVal = 5, n = data.length || 1;
+    const barWidth = innerW / Math.max(n,1) * 0.6, gap = innerW / Math.max(n,1) * 0.4;
+
+    ctx.strokeStyle = "#e5e7eb";
+    for(let i=0;i<=5;i++){
+      const y = padding.top + innerH * (1 - i/maxVal);
+      ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(W - padding.right, y); ctx.stroke();
+      ctx.fillStyle = "#64748b"; ctx.font = "12px sans-serif"; ctx.textAlign="right"; ctx.textBaseline="middle";
+      ctx.fillText(String(i), padding.left - 6, y);
+    }
+    ctx.fillStyle = "rgba(11,61,145,0.9)";
+    data.forEach((d, idx) => {
+      const x = padding.left + idx * (barWidth + gap) + gap/2;
+      const h = innerH * (d.avg / maxVal);
+      const y = padding.top + innerH - h;
+      roundRect(ctx, x, y, Math.max(1, barWidth), h, 6); ctx.fill();
+    });
+  }
+
+  // ---------- events ----------
+  document.getElementById("addSessionBtn").addEventListener("click", () => {
+    const title = newTitle.value.trim(); if(!title) return;
+    const s = { id: (self.crypto||window.crypto).randomUUID(), title, date: newDate.value || new Date().toISOString().slice(0,10) };
+    state.sessions = [s, ...state.sessions];
+    selectedSessionId = s.id;
+    newTitle.value = "";
+    saveState(); renderSessions(); renderChart();
+  });
+
+  document.getElementById("saveEntryBtn").addEventListener("click", () => {
+    if (!selectedSessionId) { alert("Add a session first (top-left) before saving feedback."); return; }
+    if (!selectedMember || rating === 0){ alert("Please select a member and a rating (1–5). ✨"); return; }
+    const entry = {
+      id: (self.crypto||window.crypto).randomUUID(),
+      member: selectedMember,
+      sessionId: selectedSessionId,
+      rating,
+      likes: Object.keys(likes).filter(k => likes[k]),
+      feedback: ($("#feedback").value || "").trim(),
+      topics: ($("#topics").value || "").trim(),
+      createdAt: new Date().toISOString()
+    };
+    state.entries = [entry, ...state.entries];
+    saveState();
+    $("#feedback").value = ""; $("#topics").value = "";
+    rating=0; likes={pacing:false,examples:false,handsOn:false,discussion:false};
+    renderStars(); renderLikes(); renderTable(); renderChart();
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    $("#feedback").value = ""; $("#topics").value = "";
+    rating=0; likes={pacing:false,examples:false,handsOn:false,discussion:false};
+    renderStars(); renderLikes();
+  });
+
+  document.getElementById("exportBtn").addEventListener("click", () => {
+    const headers = ["createdAt","sessionDate","sessionTitle","member","rating","likes","feedback","futureTopics"];
+    const rows = state.entries.map(e => {
+      const s = state.sessions.find(x => x.id === e.sessionId) || { date:"", title:"" };
+      return [ e.createdAt, s.date, s.title, e.member, String(e.rating), (e.likes||[]).join(";"), csvQuote(e.feedback||""), csvQuote(e.topics||"") ].join(",");
+    });
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "ai-learning-pod-feedback-"+new Date().toISOString().slice(0,10)+".csv";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", () => {
+    if(!confirm("This will permanently delete all saved data on this device. Continue?")) return;
+    state = { members: DEFAULT_MEMBERS.slice(), sessions: [], entries: [] };
+    selectedMember = state.members[0];
+    selectedSessionId = null;
+    rating=0; likes={pacing:false,examples:false,handsOn:false,discussion:false};
+    localStorage.removeItem(STORAGE_KEY);
+    newDate.value = new Date().toISOString().slice(0,10);
+    newTitle.value = ""; $("#feedback").value = ""; $("#topics").value = "";
+    filterMemberVal = "all"; filterSessionId = "all";
+    renderMembers(); renderSessions(); renderStars(); renderLikes(); renderTable(); renderChart();
+  });
+
+  document.getElementById("clearFiltersBtn").addEventListener("click", () => {
+    filterMemberVal = "all"; filterSessionId = "all";
+    filterMember.value="all"; filterSession.value="all";
+    renderTable();
+  });
+
+  memberSelect.addEventListener("change", e => selectedMember = e.target.value);
+  sessionSelect.addEventListener("change", e => selectedSessionId = e.target.value);
+  filterMember.addEventListener("change", e => { filterMemberVal = e.target.value; renderTable(); });
+  filterSession.addEventListener("change", e => { filterSessionId = e.target.value; renderTable(); });
+
+  $$(".pill").forEach(btn => {
+    btn.addEventListener("click", () => { const key = btn.getAttribute("data-like"); likes[key] = !likes[key]; renderLikes(); });
+  });
+
+  // ---------- boot ----------
+  newDate.value = new Date().toISOString().slice(0,10);
+  function renderAll(){ renderMembers(); renderSessions(); renderStars(); renderLikes(); renderTable(); renderChart(); }
+  renderAll();
+})();
+</script>
+
   </script>
 </body>
 </html>
